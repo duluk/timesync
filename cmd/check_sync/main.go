@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -117,7 +118,47 @@ func getSSHTime(hostname string) (time.Time, error) {
 }
 
 // Modify the main function to use getTimeFromMachine instead of getNTPTime
+func setupLogging() (*os.File, error) {
+	// Determine log directory
+	logDir := os.Getenv("XDG_STATE_HOME")
+	if logDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("could not find home directory: %v", err)
+		}
+		logDir = filepath.Join(homeDir, ".local", "state")
+	}
+
+	// Ensure log directory exists
+	logDir = filepath.Join(logDir, "timesync")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, fmt.Errorf("could not create log directory: %v", err)
+	}
+
+	// Open log file with timestamp in name
+	timestamp := time.Now().Format("2006-01-02")
+	logPath := filepath.Join(logDir, fmt.Sprintf("timesync-%s.log", timestamp))
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("could not open log file: %v", err)
+	}
+
+	log.SetOutput(logFile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.LUTC)
+
+	log.Printf("Logging initialized to: %s", logPath)
+	return logFile, nil
+}
+
 func main() {
+	// Set up logging first thing
+	logFile, err := setupLogging()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to set up logging: %v\n", err)
+		os.Exit(1)
+	}
+	defer logFile.Close()
+
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: go run clock_sync.go <hostname1> <hostname2> ...")
 		os.Exit(1)
