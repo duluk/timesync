@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -73,7 +74,7 @@ func getTimeFromMachine(hostname string) (time.Time, error) {
 	return getSSHTime(hostname)
 }
 
-func getTimeFromMachine(hostname string) (time.Time, error) {
+func getSSHTime(hostname string) (time.Time, error) {
 	sshAgent, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to connect to SSH agent: %v", err)
@@ -81,24 +82,24 @@ func getTimeFromMachine(hostname string) (time.Time, error) {
 	defer sshAgent.Close()
 
 	agentClient := agent.NewClient(sshAgent)
-
 	config := &ssh.ClientConfig{
 		User: os.Getenv("USER"),
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeysCallback(agentClient.Signers),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
 	}
 
 	client, err := ssh.Dial("tcp", hostname+":22", config)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to dial: %v", err)
+		return time.Time{}, fmt.Errorf("failed to dial SSH: %v", err)
 	}
 	defer client.Close()
 
 	session, err := client.NewSession()
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to create session: %v", err)
+		return time.Time{}, fmt.Errorf("failed to create SSH session: %v", err)
 	}
 	defer session.Close()
 
